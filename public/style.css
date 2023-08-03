@@ -5445,3 +5445,10 @@ body.waifuMode .zoomed_avatar {
     text-align: center;
     line-height: 14px;
 }
+
+#myOverviewDiv {
+    width: 200px;
+    height: 200px;
+    border: 1px solid black;
+    /* other styling as desired... */
+}
