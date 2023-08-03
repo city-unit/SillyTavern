@@ -1048,11 +1048,10 @@ $("document").ready(function () {
         }
 
         if (event.ctrlKey && event.key == "ArrowUp") { //edits last USER message if chatbar is empty and focused
-            console.debug('got ctrl+uparrow input');
             if (
                 $("#send_textarea").val() === '' &&
                 chatbarInFocus === true &&
-                $(".swipe_right:last").css('display') === 'flex' &&
+                ($(".swipe_right:last").css('display') === 'flex' || $('.last_mes').attr('is_system') === 'true') &&
                 $("#character_popup").css("display") === "none" &&
                 $("#shadow_select_chat_popup").css("display") === "none"
             ) {
@@ -1060,7 +1059,7 @@ $("document").ready(function () {
                 const lastIsUserMes = isUserMesList[isUserMesList.length - 1];
                 const editMes = lastIsUserMes.querySelector('.mes_block .mes_edit');
                 if (editMes !== null) {
-                    $(editMes).click();
+                    $(editMes).trigger('click');
                 }
             }
         }
@@ -1079,6 +1078,60 @@ $("document").ready(function () {
                 if (editMes !== null) {
                     $(editMes).click();
                 }
+            }
+        }
+
+        if (event.key == "Escape") { //closes various panels
+            if ($("#curEditTextarea").is(":visible")) {
+                return
+            }
+
+            if ($("#dialogue_popup").is(":visible")) {
+                if ($("#dialogue_popup_cancel").is(":visible")) {
+                    $("#dialogue_popup_cancel").trigger('click');
+                    return
+                } else {
+                    $("#dialogue_popup_ok").trigger('click')
+                    return
+                }
+            }
+            if ($("#select_chat_popup").is(":visible")) {
+                $("#select_chat_cross").trigger('click');
+                return
+            }
+            if ($("#character_popup").is(":visible")) {
+                $("#character_cross").trigger('click');
+                return
+            }
+
+            if ($(".drawer-content")
+                .not('#WorldInfo')
+                .not('#left-nav-panel')
+                .not('#right-nav-panel')
+                .is(":visible")) {
+                let visibleDrawerContent = $(".drawer-content:visible")
+                    .not('#WorldInfo')
+                    .not('#left-nav-panel')
+                    .not('#right-nav-panel')
+                $(visibleDrawerContent).parent().find('.drawer-icon').trigger('click');
+                return
+            }
+
+            if ($("#floatingPrompt").is(":visible")) {
+                $("#ANClose").trigger('click');
+                return
+            }
+            if ($("#WorldInfo").is(":visible")) {
+                $("#WIDrawerIcon").trigger('click');
+                return
+            }
+            if ($("#left-nav-panel").is(":visible")) {
+                $("#leftNavDrawerIcon").trigger('click');
+                return
+            }
+            if ($("#right-nav-panel").is(":visible")) {
+                $("#rightNavDrawerIcon").trigger('click');
+                return
             }
         }
     }

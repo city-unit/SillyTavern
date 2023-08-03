@@ -178,13 +178,19 @@ async function loadSentencepieceTokenizer(modelPath) {
 async function countSentencepieceTokens(spp, text) {
     // Fallback to strlen estimation
     if (!spp) {
-        return Math.ceil(text.length / CHARS_PER_TOKEN);
+        return {
+            ids: [],
+            count: Math.ceil(text.length / CHARS_PER_TOKEN)
+        };
     }
 
-    let cleaned = cleanText(text);
+    let cleaned = text; // cleanText(text); <-- cleaning text can result in an incorrect tokenization
 
     let ids = spp.encodeIds(cleaned);
-    return ids.length;
+    return {
+        ids,
+        count: ids.length
+    };
 }
 
 async function loadClaudeTokenizer(modelPath) {
@@ -506,8 +512,16 @@ app.post("/generate", jsonParser, async function (request, response_generate = r
                 return response.body.pipe(response_generate);
             } else {
                 if (!response.ok) {
-                    console.log(`Kobold returned error: ${response.status} ${response.statusText} ${await response.text()}`);
-                    return response.status(response.status).send({ error: true });
+                    const errorText = await response.text();
+                    console.log(`Kobold returned error: ${response.status} ${response.statusText} ${errorText}`);
+
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        const message = errorJson?.detail?.msg || errorText;
+                        return response_generate.status(400).send({ error: { message } });
+                    } catch {
+                        return response_generate.status(400).send({ error: { message: errorText } });
+                    }
                 }
 
                 const data = await response.json();
@@ -1799,9 +1813,9 @@ app.post("/generate_novelai", jsonParser, async function (request, response_gene
         controller.abort();
     });
 
-    console.log(request.body);
-    const bw = require('./src/bad-words');
+    const novelai = require('./src/novelai');
     const isNewModel = (request.body.model.includes('clio') || request.body.model.includes('kayra'));
+    const isKrake = request.body.model.includes('krake');
     const data = {
         "input": request.body.input,
         "model": request.body.model,
@@ -1816,6 +1830,7 @@ app.post("/generate_novelai", jsonParser, async function (request, response_gene
             "repetition_penalty_slope": request.body.repetition_penalty_slope,
             "repetition_penalty_frequency": request.body.repetition_penalty_frequency,
             "repetition_penalty_presence": request.body.repetition_penalty_presence,
+            "repetition_penalty_whitelist": isNewModel ? novelai.repPenaltyAllowList : null,
             "top_a": request.body.top_a,
             "top_p": request.body.top_p,
             "top_k": request.body.top_k,
@@ -1823,16 +1838,20 @@ app.post("/generate_novelai", jsonParser, async function (request, response_gene
             "cfg_scale": request.body.cfg_scale,
             "cfg_uc": request.body.cfg_uc,
             "phrase_rep_pen": request.body.phrase_rep_pen,
+            "stop_sequences": request.body.stop_sequences,
             //"stop_sequences": {{187}},
-            "bad_words_ids": isNewModel ? bw.clioBadWordsId : bw.badWordIds,
+            "bad_words_ids": isNewModel ? novelai.badWordsList : (isKrake ? novelai.krakeBadWordsList : novelai.euterpeBadWordsList),
+            "logit_bias_exp": isNewModel ? novelai.logitBiasExp : null,
             //generate_until_sentence = true;
             "use_cache": request.body.use_cache,
             "use_string": true,
             "return_full_text": request.body.return_full_text,
-            "prefix": isNewModel ? "special_instruct" : request.body.prefix,
+            "prefix": request.body.prefix,
             "order": request.body.order
         }
     };
+    const util = require('util');
+    console.log(util.inspect(data, { depth: 4 }))
 
     const args = {
         body: JSON.stringify(data),
@@ -3170,16 +3189,19 @@ app.post("/generate_openai", jsonParser, function (request, response_generate_op
     let api_url;
     let api_key_openai;
     let headers;
+    let bodyParams;
 
     if (!request.body.use_openrouter) {
         api_url = new URL(request.body.reverse_proxy || api_openai).toString();
         api_key_openai = request.body.reverse_proxy ? request.body.proxy_password : readSecret(SECRET_KEYS.OPENAI);
         headers = {};
+        bodyParams = {};
     } else {
         api_url = 'https://openrouter.ai/api/v1';
         api_key_openai = readSecret(SECRET_KEYS.OPENROUTER);
         // OpenRouter needs to pass the referer: https://openrouter.ai/docs
         headers = { 'HTTP-Referer': request.headers.referer };
+        bodyParams = { 'transforms': ["middle-out"] };
     }
 
     if (!api_key_openai && !request.body.reverse_proxy) {
@@ -3216,7 +3238,8 @@ app.post("/generate_openai", jsonParser, function (request, response_generate_op
             "top_p": request.body.top_p,
             "top_k": request.body.top_k,
             "stop": request.body.stop,
-            "logit_bias": request.body.logit_bias
+            "logit_bias": request.body.logit_bias,
+            ...bodyParams,
         },
         signal: controller.signal,
     };
@@ -3273,11 +3296,11 @@ app.post("/generate_openai", jsonParser, function (request, response_generate_op
 
         switch (error?.response?.status) {
             case 402:
-                message = 'Credit limit reached';
+                message = error?.response?.data?.error?.message || 'Credit limit reached';
                 console.log(message);
                 break;
             case 403:
-                message = 'API key disabled or exhausted';
+                message = error?.response?.data?.error?.message || 'API key disabled or exhausted';
                 console.log(message);
                 break;
             case 451:
@@ -3411,8 +3434,8 @@ function createTokenizationHandler(getTokenizerFn) {
 
         const text = request.body.text || '';
         const tokenizer = getTokenizerFn();
-        const count = await countSentencepieceTokens(tokenizer, text);
-        return response.send({ count });
+        const { ids, count } = await countSentencepieceTokens(tokenizer, text);
+        return response.send({ ids, count });
     };
 }
 
