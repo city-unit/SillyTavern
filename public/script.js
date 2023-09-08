@@ -1523,8 +1523,8 @@ function addOneMessage(mes, { type = "normal", insertAfter = null, scroll = true
         else {
             const target = $("#chat").find(`.mes[mesid="${insertAfter}"]`);
             $(HTMLForEachMes).insertAfter(target);
-            $(HTMLForEachMes).find('.swipe_left').css('display', 'none');
-            $(HTMLForEachMes).find('.swipe_right').css('display', 'none');
+            //$(HTMLForEachMes).find('.swipe_left').css('display', 'none');
+            //$(HTMLForEachMes).find('.swipe_right').css('display', 'none');
         }
     }
 
@@ -5761,64 +5761,62 @@ function read_bg_load(input) {
 }
 
 function showSwipeButtons() {
-    if (chat.length === 0) {
-        return;
+    if (!chat || chat.length === 0) return;
+
+    for (let i = 0; i < chat.length; i++) {
+        const message = chat[i];
+
+        if (
+            message.is_system ||
+            !swipes ||
+            $('.mes:last').attr('mesid') < 0 ||
+            message.is_user ||
+            message.extra?.image ||
+            count_view_mes < 1 ||
+            (selected_group && is_group_generating)
+        ) { continue; }
+
+        // Swipe id should be set if alternate greetings are added
+        if (i === 0 && message.swipe_id === undefined) {
+            continue;
+        }
+
+        // If there is no swipe-message for the current message
+        if (message['swipe_id'] === undefined) {
+            message['swipe_id'] = 0; // Set it to id 0
+            message['swipes'] = []; // Empty the array
+            message['swipes'][0] = message['mes']; // Assign swipe array with the current message
+        }
+
+        const currentMessage = $("#chat").children().filter(`[mesid="${i}"]`);
+        const swipeId = message.swipe_id;
+        const swipesCounterHTML = (`${(swipeId + 1)}/${message.swipes.length}`);
+
+        if (swipeId !== undefined && message.swipes.length > 1) {
+            currentMessage.children('.swipe_left').css('display', 'flex');
+        }
+
+        if (is_send_press === false || message.swipes.length >= swipeId) {
+            currentMessage.children('.swipe_right').css('display', 'flex');
+            currentMessage.children('.swipe_right').css('opacity', '0.3');
+        }
+
+        if ((message.swipes.length - swipeId) === 1) {
+            currentMessage.children('.swipe_right').css('opacity', '0.7');
+        }
+
+        // Update the swipes counter using the mesid of the current message
+        const currentMessageSwipesCounter = currentMessage.find(".swipes-counter");
+        currentMessageSwipesCounter.html(swipesCounterHTML);
     }
-
-    if (
-        chat[chat.length - 1].is_system ||
-        !swipes ||
-        $('.mes:last').attr('mesid') < 0 ||
-        chat[chat.length - 1].is_user ||
-        chat[chat.length - 1].extra?.image ||
-        count_view_mes < 1 ||
-        (selected_group && is_group_generating)
-    ) { return; }
-
-    // swipe_id should be set if alternate greetings are added
-    if (chat.length == 1 && chat[0].swipe_id === undefined) {
-        return;
-    }
-
-    //had to add this to make the swipe counter work
-    //(copied from the onclick functions for swipe buttons..
-    //don't know why the array isn't set for non-swipe messsages in Generate or addOneMessage..)
-
-    if (chat[chat.length - 1]['swipe_id'] === undefined) {              // if there is no swipe-message in the last spot of the chat array
-        chat[chat.length - 1]['swipe_id'] = 0;                        // set it to id 0
-        chat[chat.length - 1]['swipes'] = [];                         // empty the array
-        chat[chat.length - 1]['swipes'][0] = chat[chat.length - 1]['mes'];  //assign swipe array with last message from chat
-    }
-
-    const currentMessage = $("#chat").children().filter(`[mesid="${count_view_mes - 1}"]`);
-    const swipeId = chat[chat.length - 1].swipe_id;
-    var swipesCounterHTML = (`${(swipeId + 1)}/${(chat[chat.length - 1].swipes.length)}`);
-
-    if (swipeId !== undefined && chat[chat.length - 1].swipes.length > 1) {
-        currentMessage.children('.swipe_left').css('display', 'flex');
-    }
-    //only show right when generate is off, or when next right swipe would not make a generate happen
-    if (is_send_press === false || chat[chat.length - 1].swipes.length >= swipeId) {
-        currentMessage.children('.swipe_right').css('display', 'flex');
-        currentMessage.children('.swipe_right').css('opacity', '0.3');
-    }
-    //console.log((chat[chat.length - 1]));
-    if ((chat[chat.length - 1].swipes.length - swipeId) === 1) {
-        //console.log('highlighting R swipe');
-        currentMessage.children('.swipe_right').css('opacity', '0.7');
-    }
-    //console.log(swipesCounterHTML);
-
-    $(".swipes-counter").html(swipesCounterHTML);
-
-    //console.log(swipeId);
-    //console.log(chat[chat.length - 1].swipes.length);
 }
+
+
 
 function hideSwipeButtons() {
     //console.log('hideswipebuttons entered');
-    $("#chat").children().filter(`[mesid="${count_view_mes - 1}"]`).children('.swipe_right').css('display', 'none');
-    $("#chat").children().filter(`[mesid="${count_view_mes - 1}"]`).children('.swipe_left').css('display', 'none');
+    //$("#chat").children().filter(`[mesid="${count_view_mes - 1}"]`).children('.swipe_right').css('display', 'none');
+    //$("#chat").children().filter(`[mesid="${count_view_mes - 1}"]`).children('.swipe_left').css('display', 'none');
 }
 
 export async function saveMetadata() {
