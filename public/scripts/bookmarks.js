@@ -133,6 +133,30 @@ async function saveBookmarkMenu() {
     return createNewBookmark(chat.length - 1);
 }
 
+export async function createBranch(mesId){
+    if (!chat.length) {
+        toastr.warning('The chat is empty.', 'Bookmark creation failed');
+        return;
+    }
+
+    if (mesId < 0 || mesId >= chat.length) {
+        toastr.warning('Invalid message ID.', 'Bookmark creation failed');
+        return;
+    }
+
+    const lastMes = chat[mesId];
+    const mainChat = selected_group ? groups?.find(x => x.id == selected_group)?.chat_id : characters[this_chid].chat;
+    const newMetadata = { main_chat: mainChat };
+    let name = `Swipe #${mesId} - ${humanizedDateTime()}`
+
+    if (selected_group) {
+        await saveGroupBookmarkChat(selected_group, name, newMetadata, mesId);
+    } else {
+        await saveChat(name, newMetadata, mesId);
+    }
+    return name;
+}
+
 async function createNewBookmark(mesId) {
     if (!chat.length) {
         toastr.warning('The chat is empty.', 'Bookmark creation failed');

@@ -103,7 +103,8 @@ import {
 
 import {
     createNewBookmark,
-    showBookmarksButtons
+    showBookmarksButtons,
+    createBranch
 } from "./scripts/bookmarks.js";
 
 import {
@@ -6473,8 +6474,65 @@ function swipe_left() {      // when we swipe left..but no generation.
     }
 }
 
+function goToSwipe(targetSwipeId) {
+    // Close editor if it's opened for the last message
+    if (chat.length - 1 === Number(this_edit_mes_id)) {
+        closeMessageEditor();
+    }
+
+    // Stop streaming if it's enabled
+    if (isStreamingEnabled() && streamingProcessor) {
+        streamingProcessor.isStopped = true;
+    }
+
+    // Set the desired swipe ID
+    chat[chat.length - 1]['swipe_id'] = targetSwipeId;
+
+    // Validate swipe ID bounds
+    if (chat[chat.length - 1]['swipe_id'] < 0) {
+        chat[chat.length - 1]['swipe_id'] = chat[chat.length - 1]['swipes'].length - 1;
+    }
+    if (chat[chat.length - 1]['swipe_id'] >= chat[chat.length - 1]['swipes'].length) {
+        chat[chat.length - 1]['swipe_id'] = 0; // Reset to first if exceeding bounds
+    }
+
+    // Update chat data based on the new swipe ID
+    if (!Array.isArray(chat[chat.length - 1]['swipe_info'])) {
+        chat[chat.length - 1]['swipe_info'] = [];
+    }
+
+    chat[chat.length - 1]['mes'] = chat[chat.length - 1]['swipes'][chat[chat.length - 1]['swipe_id']];
+    chat[chat.length - 1]['send_date'] = chat[chat.length - 1].swipe_info[chat[chat.length - 1]['swipe_id']]?.send_date || chat[chat.length - 1].send_date;
+    chat[chat.length - 1]['extra'] = JSON.parse(JSON.stringify(chat[chat.length - 1].swipe_info[chat[chat.length - 1]['swipe_id']]?.extra || chat[chat.length - 1].extra));
+
+    // Clean up any extra properties if needed
+    if (chat[chat.length - 1].extra) {
+        if (chat[chat.length - 1].extra.memory) delete chat[chat.length - 1].extra.memory;
+        if (chat[chat.length - 1].extra.display_text) delete chat[chat.length - 1].extra.display_text;
+    }
+
+    // Update UI with the new message data
+    addOneMessage(chat[chat.length - 1], { type: 'swipe' });
+
+    // Update token count if enabled
+    if (power_user.message_token_count_enabled) {
+        const swipeMessage = $("#chat").find(`[mesid="${count_view_mes - 1}"]`);
+        const tokenCount = getTokenCount(chat[chat.length - 1].mes, 0);
+        chat[chat.length - 1]['extra']['token_count'] = tokenCount;
+        swipeMessage.find('.tokenCounterDisplay').text(`${tokenCount}t`);
+    }
+}
+
+
+async function branchChat(mesID) {
+    let name = await createBranch(mesID);
+    await openCharacterChat(name);
+    goToSwipe(3);
+}
+
+
 // when we click swipe right button
-const swipe_right = () => {
+const swipe_right = (mesID = chat.length - 1) => {
     if (chat.length - 1 === Number(this_edit_mes_id)) {
         closeMessageEditor();
     }
@@ -6489,47 +6547,55 @@ const swipe_right = () => {
             // return;
     //     }
     // }
+    if (mesID != chat.length - 1) {
+        console.log('swipe right called on a message that is not the last one');
+        branchChat(mesID);
+        return;
+    }
+
 
     const swipe_duration = 200;
     const swipe_range = 700;
     //console.log(swipe_range);
     let run_generate = false;
     let run_swipe_right = false;
-    if (chat[chat.length - 1]['swipe_id'] === undefined) {              // if there is no swipe-message in the last spot of the chat array
-        chat[chat.length - 1]['swipe_id'] = 0;                        // set it to id 0
-        chat[chat.length - 1]['swipes'] = [];                         // empty the array
-        chat[chat.length - 1]['swipe_info'] = [];
-        chat[chat.length - 1]['swipes'][0] = chat[chat.length - 1]['mes'];  //assign swipe array with last message from chat
-        chat[chat.length - 1]['swipe_info'][0] = { 'send_date': chat[chat.length - 1]['send_date'], 'gen_started': chat[chat.length - 1]['gen_started'], 'gen_finished': chat[chat.length - 1]['gen_finished'], 'extra': JSON.parse(JSON.stringify(chat[chat.length - 1]['extra'])) };
+    let currentChatMessage = chat[chat.length - 1]
+
+    if (currentChatMessage['swipe_id'] === undefined) {              // if there is no swipe-message in the last spot of the chat array
+        currentChatMessage['swipe_id'] = 0;                        // set it to id 0
+        currentChatMessage['swipes'] = [];                         // empty the array
+        currentChatMessage['swipe_info'] = [];
+        currentChatMessage['swipes'][0] = currentChatMessage['mes'];  //assign swipe array with last message from chat
+        currentChatMessage['swipe_info'][0] = { 'send_date': currentChatMessage['send_date'], 'gen_started': currentChatMessage['gen_started'], 'gen_finished': currentChatMessage['gen_finished'], 'extra': JSON.parse(JSON.stringify(currentChatMessage['extra'])) };
         //assign swipe info array with last message from chat
     }
     if (chat.length === 1 && chat[0]['swipe_id'] !== undefined && chat[0]['swipe_id'] === chat[0]['swipes'].length - 1) {    // if swipe_right is called on the last alternate greeting, loop back around
         chat[0]['swipe_id'] = 0;
     } else {
-        chat[chat.length - 1]['swipe_id']++;                                // make new slot in array
+        currentChatMessage['swipe_id']++;                                // make new slot in array
     }
-    if (chat[chat.length - 1].extra) {
+    if (currentChatMessage.extra) {
         // if message has memory attached - remove it to allow regen
-        if (chat[chat.length - 1].extra.memory) {
-            delete chat[chat.length - 1].extra.memory;
+        if (currentChatMessage.extra.memory) {
+            delete currentChatMessage.extra.memory;
         }
         // ditto for display text
-        if (chat[chat.length - 1].extra.display_text) {
-            delete chat[chat.length - 1].extra.display_text;
+        if (currentChatMessage.extra.display_text) {
+            delete currentChatMessage.extra.display_text;
         }
     }
-    if (!Array.isArray(chat[chat.length - 1]['swipe_info'])) {
-        chat[chat.length - 1]['swipe_info'] = [];
+    if (!Array.isArray(currentChatMessage['swipe_info'])) {
+        currentChatMessage['swipe_info'] = [];
     }
     //console.log(chat[chat.length-1]['swipes']);
-    if (parseInt(chat[chat.length - 1]['swipe_id']) === chat[chat.length - 1]['swipes'].length && chat.length !== 1) { //if swipe id of last message is the same as the length of the 'swipes' array and not the greeting
-        delete chat[chat.length - 1].gen_started;
-        delete chat[chat.length - 1].gen_finished;
+    if (parseInt(currentChatMessage['swipe_id']) === currentChatMessage['swipes'].length && chat.length !== 1) { //if swipe id of last message is the same as the length of the 'swipes' array and not the greeting
+        delete currentChatMessage.gen_started;
+        delete currentChatMessage.gen_finished;
         run_generate = true;
-    } else if (parseInt(chat[chat.length - 1]['swipe_id']) < chat[chat.length - 1]['swipes'].length) { //otherwise, if the id is less than the number of swipes
-        chat[chat.length - 1]['mes'] = chat[chat.length - 1]['swipes'][chat[chat.length - 1]['swipe_id']]; //load the last mes box with the latest generation
-        chat[chat.length - 1]['send_date'] = chat[chat.length - 1]?.swipe_info[chat[chat.length - 1]['swipe_id']]?.send_date || chat[chat.length - 1]['send_date']; //update send date
-        chat[chat.length - 1]['extra'] = JSON.parse(JSON.stringify(chat[chat.length - 1].swipe_info[chat[chat.length - 1]['swipe_id']]?.extra || chat[chat.length - 1].extra || []));
+    } else if (parseInt(currentChatMessage['swipe_id']) < currentChatMessage['swipes'].length) { //otherwise, if the id is less than the number of swipes
+        currentChatMessage['mes'] = currentChatMessage['swipes'][currentChatMessage['swipe_id']]; //load the last mes box with the latest generation
+        currentChatMessage['send_date'] = currentChatMessage?.swipe_info[currentChatMessage['swipe_id']]?.send_date || currentChatMessage['send_date']; //update send date
+        currentChatMessage['extra'] = JSON.parse(JSON.stringify(currentChatMessage.swipe_info[currentChatMessage['swipe_id']]?.extra || currentChatMessage.extra || []));
         run_swipe_right = true; //then prepare to do normal right swipe to show next message
     }
 
@@ -6537,8 +6603,8 @@ const swipe_right = () => {
     let this_div = currentMessage.children('.swipe_right');
     let this_mes_div = this_div.parent();
 
-    if (chat[chat.length - 1]['swipe_id'] > chat[chat.length - 1]['swipes'].length) { //if we swipe right while generating (the swipe ID is greater than what we are viewing now)
-        chat[chat.length - 1]['swipe_id'] = chat[chat.length - 1]['swipes'].length; //show that message slot (will be '...' while generating)
+    if (currentChatMessage['swipe_id'] > currentChatMessage['swipes'].length) { //if we swipe right while generating (the swipe ID is greater than what we are viewing now)
+        currentChatMessage['swipe_id'] = currentChatMessage['swipes'].length; //show that message slot (will be '...' while generating)
     }
     if (run_generate) {               //hide swipe arrows while generating
         this_div.css('display', 'none');
@@ -6565,7 +6631,7 @@ const swipe_right = () => {
                 //console.log(parseInt(chat[chat.length-1]['swipe_id']));
                 //console.log(chat[chat.length-1]['swipes'].length);
                 const swipeMessage = $("#chat").find('[mesid="' + (count_view_mes - 1) + '"]');
-                if (run_generate && parseInt(chat[chat.length - 1]['swipe_id']) === chat[chat.length - 1]['swipes'].length) {
+                if (run_generate && parseInt(currentChatMessage['swipe_id']) === currentChatMessage['swipes'].length) {
                     //shows "..." while generating
                     swipeMessage.find('.mes_text').html('...');
                     // resets the timer
@@ -6574,15 +6640,15 @@ const swipe_right = () => {
                 } else {
                     //console.log('showing previously generated swipe candidate, or "..."');
                     //console.log('onclick right swipe calling addOneMessage');
-                    addOneMessage(chat[chat.length - 1], { type: 'swipe' });
+                    addOneMessage(currentChatMessage, { type: 'swipe' });
 
                     if (power_user.message_token_count_enabled) {
-                        if (!chat[chat.length - 1].extra) {
-                            chat[chat.length - 1].extra = {};
+                        if (!currentChatMessage.extra) {
+                            currentChatMessage.extra = {};
                         }
 
-                        const tokenCount = getTokenCount(chat[chat.length - 1].mes, 0);
-                        chat[chat.length - 1]['extra']['token_count'] = tokenCount;
+                        const tokenCount = getTokenCount(currentChatMessage.mes, 0);
+                        currentChatMessage['extra']['token_count'] = tokenCount;
                         swipeMessage.find('.tokenCounterDisplay').text(`${tokenCount}t`);
                     }
                 }
@@ -6616,13 +6682,13 @@ const swipe_right = () => {
                             queue: false,
                             complete: async function () {
                                 await eventSource.emit(event_types.MESSAGE_SWIPED, (chat.length - 1));
-                                if (run_generate && !is_send_press && parseInt(chat[chat.length - 1]['swipe_id']) === chat[chat.length - 1]['swipes'].length) {
+                                if (run_generate && !is_send_press && parseInt(currentChatMessage['swipe_id']) === currentChatMessage['swipes'].length) {
                                     console.debug('caught here 2');
                                     is_send_press = true;
                                     $('.mes_buttons:last').hide();
                                     await Generate('swipe');
                                 } else {
-                                    if (parseInt(chat[chat.length - 1]['swipe_id']) !== chat[chat.length - 1]['swipes'].length) {
+                                    if (parseInt(currentChatMessage['swipe_id']) !== currentChatMessage['swipes'].length) {
                                         saveChatDebounced();
                                     }
                                 }
@@ -7005,9 +7071,17 @@ jQuery(async function () {
 
     ///// SWIPE BUTTON CLICKS ///////
 
-    $(document).on('click', '.swipe_right', swipe_right);
+    // pass the event to the swipe_right function
+    $(document).on('click', '.swipe_right', function () {
+        const mesid = $(this).closest('[mesid]').attr('mesid');
+        swipe_right(mesid);
+    });
 
-    $(document).on('click', '.swipe_left', swipe_left);
+    $(document).on('click', '.swipe_left', function () {
+        const mesid = $(this).closest('[mesid]').attr('mesid');
+        swipe_left(mesid);
+    });
+
 
     $("#character_search_bar").on("input", function () {
         const searchValue = String($(this).val()).toLowerCase();
