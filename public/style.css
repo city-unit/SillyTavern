@@ -546,6 +546,7 @@ hr {
     cursor: pointer;
     transition: 0.3s;
     opacity: 0.7;
+    display: flex;
     align-items: center;
     justify-content: center;
 }
@@ -564,7 +565,7 @@ hr {
     order: 99998;
 }
 
-.mes_stop {
+#send_but_sheld .mes_stop {
     display: none;
     order: 99997;
 }
@@ -3438,7 +3439,7 @@ a {
     min-height: 100px;
     max-height: 90vh;
     max-width: 90vh;
-    width: calc((100vw - var(--sheldWidth)) /2);
+    width: clamp(100px, 400px, calc((100vw - var(--sheldWidth)) /2));
     position: absolute;
     padding: 0;
     filter: drop-shadow(2px 2px 2px var(--grey7070a));

@@ -2260,7 +2260,7 @@ class StreamingProcessor {
         throw new Error('Generation function for streaming is not hooked up');
     }
 
-    constructor(type, force_name2) {
+    constructor(type, force_name2, timeStarted) {
         this.result = "";
         this.messageId = -1;
         this.type = type;
@@ -2270,7 +2270,7 @@ class StreamingProcessor {
         this.generator = this.nullStreamingGeneration;
         this.abortController = new AbortController();
         this.firstMessageText = '...';
-        this.timeStarted = new Date();
+        this.timeStarted = timeStarted;
     }
 
     async generate() {
@@ -2419,6 +2419,18 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         }
 
         const isContinue = type == 'continue';
+
+        // Rewrite the generation timer to account for the time passed for all the continuations.
+        if (isContinue && chat.length) {
+            const prevFinished = chat[chat.length - 1]['gen_finished'];
+            const prevStarted = chat[chat.length - 1]['gen_started'];
+
+            if (prevFinished && prevStarted) {
+                const timePassed = prevFinished - prevStarted;
+                generation_started = new Date(Date.now() - timePassed);
+                chat[chat.length - 1]['gen_started'] = generation_started;
+            }
+        }
 
         if (!dryRun) {
             deactivateSendButtons();
@@ -2665,7 +2677,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         console.debug('calling runGenerate');
 
         if (!dryRun) {
-            streamingProcessor = isStreamingEnabled() ? new StreamingProcessor(type, force_name2) : false;
+            streamingProcessor = isStreamingEnabled() ? new StreamingProcessor(type, force_name2, generation_started) : false;
         }
 
         if (isContinue) {
@@ -5175,39 +5187,46 @@ export async function getChatsFromFiles(data, isGroupChat) {
     let chat_dict = {};
     let chat_list = Object.values(data).sort((a, b) => a["file_name"].localeCompare(b["file_name"])).reverse();
 
-    for (const { file_name } of chat_list) {
-        try {
-            const endpoint = isGroupChat ? '/getgroupchat' : '/getchat';
-            const requestBody = isGroupChat
-                ? JSON.stringify({ id: file_name })
-                : JSON.stringify({
-                    ch_name: characters[context.characterId].name,
-                    file_name: file_name.replace('.jsonl', ''),
-                    avatar_url: characters[context.characterId].avatar
+    let chat_promise = chat_list.map(({ file_name}) => {
+        return new Promise(async (res, rej) => {
+            try {
+                const endpoint = isGroupChat ? '/getgroupchat' : '/getchat';
+                const requestBody = isGroupChat
+                    ? JSON.stringify({ id: file_name })
+                    : JSON.stringify({
+                        ch_name: characters[context.characterId].name,
+                        file_name: file_name.replace('.jsonl', ''),
+                        avatar_url: characters[context.characterId].avatar
+                    });
+
+                const chatResponse = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: getRequestHeaders(),
+                    body: requestBody,
+                    cache: 'no-cache',
                 });
 
-            const chatResponse = await fetch(endpoint, {
-                method: 'POST',
-                headers: getRequestHeaders(),
-                body: requestBody,
-                cache: 'no-cache',
-            });
+                if (!chatResponse.ok) {
+                    return res();
+                    // continue;
+                }
 
-            if (!chatResponse.ok) {
-                continue;
+                const currentChat = await chatResponse.json();
+                if (!isGroupChat) {
+                    // remove the first message, which is metadata, only for individual chats
+                    currentChat.shift();
+                }
+                chat_dict[file_name] = currentChat;
+
+            } catch (error) {
+                console.error(error);
             }
 
-            const currentChat = await chatResponse.json();
-            if (!isGroupChat) {
-                // remove the first message, which is metadata, only for individual chats
-                currentChat.shift();
-            }
-            chat_dict[file_name] = currentChat;
+            return res();
+        })
+    })
 
-        } catch (error) {
-            console.error(error);
-        }
-    }
+    await Promise.all(chat_promise)
 
     return chat_dict;
 }
