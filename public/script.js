@@ -7429,6 +7429,40 @@ jQuery(async function () {
         }
     });
 
+    $("#history_edit_button").on("click", function () {
+        //Add checkboxes for each history item in select_chat_block_wrapper for each in select_chat_div
+        //Add a button to delete the chat
+
+        //get select_chat_div and loop through each select_chat_block_wrapper and add a checkbox
+
+        for (let i = 0; i < $(".select_chat_block_wrapper").length; i++) {
+            if ($(".select_chat_block_wrapper").eq(i).find(".select_chat_block_checkbox").length == 0) {
+                $(".select_chat_block_wrapper").eq(i).prepend("<input type='checkbox' class='select_chat_block_checkbox'>");
+            }
+        }
+
+        //add a delete button beside history_edit_button
+        if ($("#history_delete_button").length == 0) {
+            $("#history_edit_button").after("<button id='history_delete_button'>Delete</button>");
+        }
+
+
+
+    });
+
+    //history_delete_button
+    $(document).on("click", "#history_delete_button", function () {
+        //get all the checked checkboxes and delete the chats by clicking PastChat_cross 
+        //and then clicking the dialogue_popup_ok button
+        for (let i = 0; i < $(".select_chat_block_wrapper").length; i++) {
+            if ($(".select_chat_block_wrapper").eq(i).find(".select_chat_block_checkbox").prop("checked")) {
+                $(".select_chat_block_wrapper").eq(i).find(".PastChat_cross").click();
+                $("#dialogue_popup_ok").click();
+            }
+        }
+    });
+    
+
     const elementsToUpdate = {
         '#description_textarea': function () { create_save.description = $("#description_textarea").val(); },
         '#creator_notes_textarea': function () { create_save.creator_notes = $("#creator_notes_textarea").val(); },
